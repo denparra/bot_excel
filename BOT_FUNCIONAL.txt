@@ -1,0 +1,145 @@
+Option Explicit
+
+Sub EnviarWhatsAppWebBrave3()
+    Dim ws As Worksheet
+    Dim lastRow As Long
+    Dim i As Long
+    Dim bravePath As String
+    Dim whatsappURL As String
+    Dim phone As String, message As String, imagePath As String
+    Dim imgExists As Boolean
+    Dim Status As String
+    Dim nombre As String, auto As String, anio As String
+    Dim waitSec As Integer  ' Variable para almacenar el tiempo de espera en segundos
+
+    Randomize ' Inicializar la semilla para números aleatorios
+    
+    Set ws = ThisWorkbook.Sheets("Envio")
+    
+    ' 1. Determinar la ruta de Brave (64-bit o 32-bit)
+    bravePath = ""
+    If Dir("C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe") <> "" Then
+        bravePath = "C:\Program Files\BraveSoftware\Brave-Browser\Application\brave.exe"
+    ElseIf Dir("C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe") <> "" Then
+        bravePath = "C:\Program Files (x86)\BraveSoftware\Brave-Browser\Application\brave.exe"
+    Else
+        MsgBox "No se encontró el navegador Brave en el sistema." & vbCrLf & _
+               "Por favor verifique la instalación de Brave.", vbExclamation
+        Exit Sub
+    End If
+    
+    ' Última fila con datos en la hoja "Envio"
+    lastRow = ws.Cells(ws.Rows.Count, "C").End(xlUp).Row
+    
+    ' Recorrer desde la fila 6 hasta la última fila con datos
+    For i = 6 To lastRow
+        On Error GoTo ManejarError  ' Manejo de errores
+
+        Status = UCase(Trim(ws.Cells(i, "G").Value)) ' Leer Status en columna G
+
+        ' SOLO PROCESAR SI STATUS = "VENCIDO"
+        If Status = "VENCIDO" Then
+            phone = Trim(ws.Cells(i, "C").Value)    ' Número de teléfono en columna C
+            message = Trim(ws.Cells(i, "A").Value)    ' Mensaje base en columna A
+            
+            ' Validar que el mensaje no esté vacío
+            If message = "" Then
+                ws.Cells(i, "I").Value = "Error: Mensaje vacío"
+                GoTo SiguienteCliente
+            End If
+            
+            ' 2.1 Opcional: Obtener nombre, auto y año si existen
+            nombre = Trim(ws.Cells(i, "D").Value)    ' Columna D (Nombre)
+           ' auto = Trim(ws.Cells(i, "E").Value)      ' Columna E (Auto)
+           ' anio = Trim(ws.Cells(i, "F").Value)      ' Columna F (Año)
+
+            ' 2.2 Agregar datos adicionales al mensaje si existen
+            If nombre <> "" Then message = "Hola " & nombre & ", " & message
+           ' If auto <> "" Then message = message & vbCrLf & "Vehículo: " & auto
+           ' If anio <> "" Then message = message & " - Año: " & anio
+
+            ' 2.3 Codificar caracteres especiales para URL
+            message = EncodeURL(message)
+            
+            ' 3. Si hay imagen adjunta, copiarla al portapapeles si existe
+           '  imagePath = Trim(ws.Cells(i, "H").Value) ' Columna H = ruta de imagen
+           '  imgExists = False
+           '  If imagePath <> "" Then
+           '      If Dir(imagePath) <> "" Then
+           '          imgExists = True
+                    ' Copiar archivo al portapapeles (solo si existe)
+           '         Shell "cmd /c type """ & imagePath & """ | clip", vbHide
+            '     Else
+                    ' Registrar error en la hoja y seguir con el envío sin imagen
+           '          ws.Cells(i, "I").Value = "Imagen no encontrada: " & imagePath
+           '          imgExists = False
+           '      End If
+           '  End If
+            
+            ' 3. Construcción de la URL para WhatsApp Web con el mensaje ya codificado
+            whatsappURL = "https://web.whatsapp.com/send?phone=" & phone & "&text=" & message
+            
+            ' 4. Abrir Brave con la URL de WhatsApp Web
+            Shell """" & bravePath & """ """ & whatsappURL & """", vbNormalFocus
+            
+            ' 5. Esperar a que WhatsApp Web cargue completamente antes de enviar teclas
+            ' Espera aleatoria entre 25 y 40 segundos
+            waitSec = Int((40 - 25 + 1) * Rnd + 25)
+            Application.Wait Now + waitSec / 86400
+            
+            ' 6. Enviar teclas para pegar imagen (si existe) y confirmar mensaje
+           '      If imgExists Then
+           '          Application.SendKeys "^v", True    ' Ctrl + V para pegar imagen
+           '          ' Espera aleatoria entre 2 y 5 segundos
+           '          waitSec = Int((5 - 2 + 1) * Rnd + 2)
+           '          Application.Wait Now + waitSec / 86400
+           '      End If
+            Application.SendKeys "~", True         ' Presionar Enter para enviar mensaje
+            ' Espera aleatoria entre 2 y 5 segundos
+            waitSec = Int((5 - 2 + 1) * Rnd + 2)
+            Application.Wait Now + waitSec / 86400
+            
+            ' 7. Marcar como enviado en Status2 (columna H)
+            ws.Cells(i, "H").Value = "Enviado"
+            
+            ' 8. Cerrar Brave después de cada envío
+            Shell "taskkill /F /IM brave.exe", vbHide
+            ' Espera aleatoria entre 2 y 5 segundos
+            waitSec = Int((5 - 2 + 1) * Rnd + 2)
+            Application.Wait Now + waitSec / 86400
+        End If
+        
+SiguienteCliente:
+        On Error GoTo 0   ' Restablecer control de errores
+    Next i
+    
+    MsgBox "Proceso de envío finalizado.", vbInformation
+    Exit Sub
+
+ManejarError:
+    ' Registrar cualquier error en la columna I (Status2)
+    ws.Cells(i, "I").Value = "Error: " & Err.Description
+    Err.Clear
+    Shell "taskkill /F /IM brave.exe", vbHide  ' Cerrar Brave si ocurrió error
+    waitSec = Int((5 - 2 + 1) * Rnd + 2)
+    Application.Wait Now + waitSec / 86400
+    On Error GoTo 0
+    Resume Next  ' Continuar con la siguiente fila
+End Sub
+
+' Función para codificar caracteres especiales en URL
+Function EncodeURL(ByVal texto As String) As String
+    Dim temp As String
+    temp = texto
+    temp = Replace(temp, " ", "%20")    ' Espacios
+    temp = Replace(temp, vbCrLf, "%0A")   ' Saltos de línea
+    temp = Replace(temp, "á", "%C3%A1")   ' Letras acentuadas
+    temp = Replace(temp, "é", "%C3%A9")
+    temp = Replace(temp, "í", "%C3%AD")
+    temp = Replace(temp, "ó", "%C3%B3")
+    temp = Replace(temp, "ú", "%C3%BA")
+    temp = Replace(temp, "ñ", "%C3%B1")   ' Ñ
+    temp = Replace(temp, "&", "%26")      ' Ampersand &
+    EncodeURL = temp
+End Function
+
