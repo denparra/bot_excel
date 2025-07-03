@@ -6,11 +6,15 @@ Sub EnviarWhatsAppWebBrave3()
     Dim i As Long
     Dim bravePath As String
     Dim whatsappURL As String
-    Dim phone As String, message As String, imagePath As String
+    Dim phone As String, message As String, mensajeLog As String, imagePath As String
     Dim imgExists As Boolean
     Dim Status As String
     Dim nombre As String, auto As String, anio As String
     Dim waitSec As Integer  ' Variable para almacenar el tiempo de espera en segundos
+    Dim cargaTiempo As Integer, esperaAntesTiempo As Integer
+    Dim esperaPostTiempo As Integer, esperaEntreTiempo As Integer
+    Dim enviosAntesPausa As Integer, pausaLargaTiempo As Integer
+    Dim contadorEnvios As Integer
 
     Randomize ' Inicializar la semilla para números aleatorios
     
@@ -30,7 +34,11 @@ Sub EnviarWhatsAppWebBrave3()
     
     ' Última fila con datos en la hoja "Envio"
     lastRow = ws.Cells(ws.Rows.Count, "C").End(xlUp).Row
-    
+
+    ' Configuración de intervalos y contador de envíos
+    enviosAntesPausa = GetIntervalo("EnviosAntesDePausa")
+    contadorEnvios = 0
+
     ' Recorrer desde la fila 6 hasta la última fila con datos
     For i = 6 To lastRow
         On Error GoTo ManejarError  ' Manejo de errores
@@ -40,7 +48,8 @@ Sub EnviarWhatsAppWebBrave3()
         ' SOLO PROCESAR SI STATUS = "VENCIDO"
         If Status = "VENCIDO" Then
             phone = Trim(ws.Cells(i, "C").Value)    ' Número de teléfono en columna C
-            message = Trim(ws.Cells(i, "A").Value)    ' Mensaje base en columna A
+            mensajeLog = Trim(ws.Cells(i, "A").Value)    ' Mensaje base en columna A
+            message = mensajeLog
             
             ' Validar que el mensaje no esté vacío
             If message = "" Then
@@ -54,7 +63,10 @@ Sub EnviarWhatsAppWebBrave3()
            ' anio = Trim(ws.Cells(i, "F").Value)      ' Columna F (Año)
 
             ' 2.2 Agregar datos adicionales al mensaje si existen
-            If nombre <> "" Then message = "Hola " & nombre & ", " & message
+            If nombre <> "" Then
+                mensajeLog = "Hola " & nombre & ", " & mensajeLog
+                message = "Hola " & nombre & ", " & message
+            End If
            ' If auto <> "" Then message = message & vbCrLf & "Vehículo: " & auto
            ' If anio <> "" Then message = message & " - Año: " & anio
 
@@ -81,11 +93,14 @@ Sub EnviarWhatsAppWebBrave3()
             
             ' 4. Abrir Brave con la URL de WhatsApp Web
             Shell """" & bravePath & """ """ & whatsappURL & """", vbNormalFocus
-            
+
             ' 5. Esperar a que WhatsApp Web cargue completamente antes de enviar teclas
-            ' Espera aleatoria entre 25 y 40 segundos
-            waitSec = Int((40 - 25 + 1) * Rnd + 25)
-            Application.Wait Now + waitSec / 86400
+            cargaTiempo = GetIntervalo("CargaWhatsApp")
+            Application.Wait Now + cargaTiempo / 86400
+
+            ' 6. Espera adicional antes de enviar
+            esperaAntesTiempo = GetIntervalo("EsperaAntesDeEnviar")
+            Application.Wait Now + esperaAntesTiempo / 86400
             
             ' 6. Enviar teclas para pegar imagen (si existe) y confirmar mensaje
            '      If imgExists Then
@@ -95,18 +110,26 @@ Sub EnviarWhatsAppWebBrave3()
            '          Application.Wait Now + waitSec / 86400
            '      End If
             Application.SendKeys "~", True         ' Presionar Enter para enviar mensaje
-            ' Espera aleatoria entre 2 y 5 segundos
-            waitSec = Int((5 - 2 + 1) * Rnd + 2)
-            Application.Wait Now + waitSec / 86400
+            esperaPostTiempo = GetIntervalo("EsperaPostEnvio")
+            Application.Wait Now + esperaPostTiempo / 86400
             
             ' 7. Marcar como enviado en Status2 (columna H)
             ws.Cells(i, "H").Value = "Enviado"
+
+            ' Registrar en hoja Log
+            RegistrarLog i, phone, mensajeLog, cargaTiempo, esperaAntesTiempo, esperaPostTiempo, "Enviado", ""
             
             ' 8. Cerrar Brave después de cada envío
             Shell "taskkill /F /IM brave.exe", vbHide
-            ' Espera aleatoria entre 2 y 5 segundos
-            waitSec = Int((5 - 2 + 1) * Rnd + 2)
-            Application.Wait Now + waitSec / 86400
+
+            esperaEntreTiempo = GetIntervalo("EsperaEntreClientes")
+            Application.Wait Now + esperaEntreTiempo / 86400
+
+            contadorEnvios = contadorEnvios + 1
+            If enviosAntesPausa > 0 And contadorEnvios Mod enviosAntesPausa = 0 Then
+                pausaLargaTiempo = GetIntervalo("DuracionPausaLarga")
+                Application.Wait Now + pausaLargaTiempo / 86400
+            End If
         End If
         
 SiguienteCliente:
@@ -119,10 +142,12 @@ SiguienteCliente:
 ManejarError:
     ' Registrar cualquier error en la columna I (Status2)
     ws.Cells(i, "I").Value = "Error: " & Err.Description
+    RegistrarLog i, phone, mensajeLog, cargaTiempo, esperaAntesTiempo, esperaPostTiempo, "Error", Err.Description
     Err.Clear
     Shell "taskkill /F /IM brave.exe", vbHide  ' Cerrar Brave si ocurrió error
-    waitSec = Int((5 - 2 + 1) * Rnd + 2)
-    Application.Wait Now + waitSec / 86400
+
+    esperaEntreTiempo = GetIntervalo("EsperaEntreClientes")
+    Application.Wait Now + esperaEntreTiempo / 86400
     On Error GoTo 0
     Resume Next  ' Continuar con la siguiente fila
 End Sub
@@ -142,4 +167,45 @@ Function EncodeURL(ByVal texto As String) As String
     temp = Replace(temp, "&", "%26")      ' Ampersand &
     EncodeURL = temp
 End Function
+
+' Obtener un número aleatorio dentro del intervalo definido en la hoja Config
+Function GetIntervalo(ByVal parametro As String) As Integer
+    Dim wsCfg As Worksheet
+    Dim fila As Variant
+    Dim minVal As Double, maxVal As Double
+
+    On Error GoTo sinValor
+    Set wsCfg = ThisWorkbook.Sheets("Config")
+    fila = Application.Match(parametro, wsCfg.Columns(1), 0)
+    If IsError(fila) Then GoTo sinValor
+    minVal = Val(wsCfg.Cells(fila, 2).Value)
+    maxVal = Val(wsCfg.Cells(fila, 3).Value)
+    If maxVal < minVal Then maxVal = minVal
+    GetIntervalo = Int((maxVal - minVal + 1) * Rnd + minVal)
+    Exit Function
+sinValor:
+    GetIntervalo = 0
+End Function
+
+' Registrar información de cada envío en la hoja Log
+Sub RegistrarLog(ByVal fila As Long, ByVal telefono As String, ByVal mensaje As String, _
+                 ByVal tCarga As Integer, ByVal tAntes As Integer, ByVal tPost As Integer, _
+                 ByVal resultado As String, ByVal nota As String)
+    Dim wsLog As Worksheet
+    Dim r As Long
+
+    On Error Resume Next
+    Set wsLog = ThisWorkbook.Sheets("Log")
+    If wsLog Is Nothing Then Exit Sub
+    r = wsLog.Cells(wsLog.Rows.Count, "A").End(xlUp).Row + 1
+    wsLog.Cells(r, "A").Value = Now
+    wsLog.Cells(r, "B").Value = fila
+    wsLog.Cells(r, "C").Value = telefono
+    wsLog.Cells(r, "D").Value = mensaje
+    wsLog.Cells(r, "E").Value = tCarga
+    wsLog.Cells(r, "F").Value = tAntes
+    wsLog.Cells(r, "G").Value = tPost
+    wsLog.Cells(r, "H").Value = resultado
+    wsLog.Cells(r, "I").Value = nota
+End Sub
 
