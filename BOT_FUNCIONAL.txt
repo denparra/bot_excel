@@ -45,8 +45,8 @@ Sub EnviarWhatsAppWebBrave3()
 
         Status = UCase(Trim(ws.Cells(i, "G").Value)) ' Leer Status en columna G
 
-        ' SOLO PROCESAR SI STATUS = "VENCIDO"
-        If Status = "VENCIDO" Then
+        ' SOLO PROCESAR SI STATUS = "ENVIAR"
+        If Status = "ENVIAR" Then
             phone = Trim(ws.Cells(i, "C").Value)    ' Número de teléfono en columna C
             mensajeLog = Trim(ws.Cells(i, "A").Value)    ' Mensaje base en columna A
             message = mensajeLog
@@ -126,9 +126,11 @@ Sub EnviarWhatsAppWebBrave3()
             Application.Wait Now + esperaEntreTiempo / 86400
 
             contadorEnvios = contadorEnvios + 1
-            If enviosAntesPausa > 0 And contadorEnvios Mod enviosAntesPausa = 0 Then
-                pausaLargaTiempo = GetIntervalo("DuracionPausaLarga")
-                Application.Wait Now + pausaLargaTiempo / 86400
+            If enviosAntesPausa > 0 Then
+                If contadorEnvios Mod enviosAntesPausa = 0 Then
+                    pausaLargaTiempo = GetIntervalo("DuracionPausaLarga")
+                    Application.Wait Now + pausaLargaTiempo / 86400
+                End If
             End If
         End If
         
