@@ -8,13 +8,13 @@
 - **Columna A**: mensaje a enviar.
 - **Columna C**: número de teléfono.
 - **Columna D** (opcional): nombre del cliente.
-- **Columna G**: status. Solo si dice `"VENCIDO"` se procede con el envío.
+- **Columna G**: status. Solo si dice `"ENVIAR"` se procede con el envío.
 - **Columna H**: se marca como `"Enviado"` si fue exitoso.
 - **Columna I**: errores o resultados adicionales.
 
 ### 2. Proceso paso a paso
 1. Detecta ruta de Brave (64 o 32 bits).
-2. Si `Status = "VENCIDO"`:
+2. Si `Status = "ENVIAR"`:
    - Toma el número y mensaje.
    - Agrega nombre si está disponible.
    - Codifica el mensaje para URL.
